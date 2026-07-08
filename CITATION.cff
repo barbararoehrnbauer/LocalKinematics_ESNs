@@ -1,0 +1,28 @@
+
+cff-version: 1.0.0
+
+title: "Code for: A continuum mechanics based framework to quantify local kinematics in electrospun networks for mechanobiological investigations"
+
+message: >
+  If you use this software, please cite it using the metadata below.
+
+type: software
+
+authors:
+-   family-names: Zimmerli
+    given-names: Joël
+    affiliation: School of Engineering, Zurich University of Applied Sciences (ZHAW)
+-   family-names: Hofmann
+    given-names: Jonas
+    affiliation: School of Engineering, Zurich University of Applied Sciences (ZHAW)
+  - family-names: Röhrnbauer
+    given-names: Barbara
+    affiliation: School of Engineering, Zurich University of Applied Sciences (ZHAW)
+
+license: BSD-3-Clause
+
+repository-code: https://github.com/barbararoehrnbauer/LocalKinematics_ESNs/
+
+version: 1.0.0
+
+date-released: 2026-07-08
