@@ -1,2 +1,263 @@
-# LocalKinematics_ESNs
-Supplementary code to the publication "A continuum mechanics based framework to quantify local kinematics in electrospun networks for mechanobiological investigations"
+# ESN Simulation Code – Abaqus and MATLAB Scripts for Electrospun Fiber Network Generation, Post-Processing, and Kinematic Analysis
+
+## Overview
+The manuscript introduces a numerical and continuum-mechanics-based workflow to quantify local surface kinematics in electrospun fiber networks (ESN). The repository provides the simulation and post-processing scripts used to generate the numerical ESN models, extract nodal coordinate data, render virtual ESN image sequences, and compute the local kinematic quantities reported in the manuscript.
+
+Until the manuscript is formally published, users should cite the manuscript title and authors listed below. After publication, this section should be updated with the journal name, DOI, and final citation.
+
+### Authors
+
+- **Joël Zimmerli**
+- **Jonas Hofmann**
+- **Barbara Röhrnbauer**
+
+Affiliation:
+
+**ZHAW School of Engineering, IMES Institute of Mechanical Systems, Technikumstrasse 71, 8401 Winterthur, Switzerland**
+
+This repository contains the simulation, post-processing, and analysis code used in the study described in the accompanying manuscript, which introduces a continuum-mechanics-based framework for quantifying local kinematics in electrospun fiber networks (ESN):
+
+1. **`001_ESN_builder.py`** (Abaqus/Python) – generates parametric representative volume elements (RVEs) of electrospun fiber networks, meshes them, applies crosslinks and periodic boundary conditions (PBC), and sets up an Abaqus job for finite element (FE) analysis.
+2. **`006_Script_Coord_20Frames.py`** (Abaqus/Python) – post-processes the resulting Abaqus output database (ODB) files by extracting nodal coordinates over all analysis frames, providing the raw kinematic data required for strain-field analysis of the simulated ESN.
+3. **`Matlab_012_RenderESN.mlx`** (MATLAB) – renders the ESN fiber network as grayscale line-drawing images for each analyzed frame, based on the exported nodal coordinates.
+4. **`Kinematic_Fingerprint_Analysis.mlx`** (MATLAB) – the main evaluation script: computes local deformation gradients, Green-Lagrange strains, local rotation, and the deformation type exponent from the facet centers of the ESN, and assembles the resulting "kinematic fingerprint" of the network.
+
+Scripts 1 and 2 must be run within an **Abaqus/CAE Python (kernel) environment**; they rely exclusively on Abaqus-internal modules and are not intended to run as standalone Python scripts. Scripts 3 and 4 are **MATLAB Live Scripts** and are run in MATLAB, using the `.mat` coordinate files produced from the `_COORD.txt` output of script 2 (see below) as their input.
+
+---
+
+## 1. `001_ESN_builder.py` – ESN Network Generation
+
+### Purpose
+
+Generates fully parametric ESN RVE models, ready for FE simulation, including:
+
+- Randomized fiber geometry (two selectable generation methods)
+- Beam-element meshing (B22 elements, circular cross-section)
+- Elastic-plastic fiber material definition
+- Crosslinks between neighboring fibers (tie constraints)
+- Periodic boundary conditions (PBC) emulating an infinitely extended network
+- Load-case-specific boundary conditions and a submission-ready Abaqus job
+
+### Requirements
+
+- **Abaqus/CAE** with the Abaqus Scripting Interface (Python 2 / `mbcs` encoding)
+- Only Abaqus-internal modules are used (`part`, `material`, `section`, `assembly`, `step`, `interaction`, `load`, `mesh`, `job`, `sketch`, `visualization`, `abaqus`, `abaqusConstants`, `customKernel`) plus the standard libraries `math`, `random`, `datetime`, `operator`
+- No external Python environment or additional packages required — the script runs **only inside Abaqus**
+
+### How to run
+
+```
+abaqus cae noGUI=001_ESN_builder.py
+```
+
+or within Abaqus: File->Run Script
+
+
+A new model (`Mdb()`) is created for every generated configuration, to avoid conflicts on repeated execution. The corresponding `.cae` file and Abaqus input file (`.inp`) are written to the working directory.
+
+### Key parameters (set at the top of the script)
+
+| Parameter | Meaning |
+|---|---|
+| `n_odb` | Number of ESN realizations to generate per configuration |
+| `b_ns`, `t_ns` | Lists of RVE widths / thicknesses to generate [µm] |
+| `l_s_mean` | Mean segment length between two crosslinks [µm] (governs the interaction range `Int_t`) |
+| `eps11`, `eps12` | Applied strain / shear for the respective load case |
+| `LoadCase` | `'Uniaxial'`, `'PlanarTension'`, or `'SimpleShear'` |
+| `youngs`, `poisson`, `plasticity` | Material properties of the individual fiber |
+| `d_f`, `por` | Fiber diameter and target porosity of the network (govern the generated total fiber length) |
+| `Alg` | Degree of isotropy (RandomWalk only): 1 = isotropic, → 0 = increasingly aligned |
+| `ang_av/-stdev/-min/-max` | Statistics of the segment-to-segment angle changes  |
+| `l_step`, `res_fp` | Numerical resolution parameters (spline interpolation, segment length, meshing/partitioning resolution) |
+
+### Workflow
+
+1. **Parameter and material definition** – fiber and beam cross-section properties, load step (`StaticStep` with `nlgeom=ON` and stabilization), field/history output requests.
+2. **Fiber generation** 
+   - *RandomWalk*: fibers are generated step-by-step with a varying angle; when a fiber crosses an RVE boundary, it is trimmed exactly at the edge and continued on the opposite edge (direct PBC coupling).
+   It runs until the total fiber length `TotalFibreLength`, derived from the target porosity, is reached.
+3. **Meshing** – each fiber is recursively bisected until the element edge length falls below `res_fp`, followed by beam-element meshing (B22) and definition of a node set of potential crosslink nodes (`InternalNodes`).
+4. **Crosslink generation** – a randomly shuffled fiber order (`FLS`) is used to create tie constraints between neighboring fibers within the calculated interaction range `Int_t` (derived from target density / mean segment length using a literature-based relation).
+5. **Periodic boundary conditions (PBC)** – coupling equations (`m.Equation`) between opposite RVE edges, referenced to three reference points (`Origin`, `X-Dir`, `Y-Dir`).
+6. **Load case & job** – depending on `LoadCase`, the reference-point boundary conditions are set within the load step, a description containing all relevant metrics (fiber count, fiber length, isotropy coefficient, etc.) is generated, and an Abaqus job including input file is written.
+
+
+### Output files (per generated configuration)
+
+- `<date>_[S|R]_<b_n>_<t_n>...<LoadCase>_<i>.cae` – Abaqus model database
+- `<...>.inp` – Abaqus input file (via `writeInput`)
+- `<...>_fiberstackorder.txt` – fiber order used for crosslink generation, plus the interaction range used
+
+
+---
+
+## 2. `006_Script_Coord_20Frames.py` – Nodal Coordinate Extraction
+
+### Purpose
+
+To analyze the strain fields of a simulated ESN, the mesh node coordinates must be exported from the FE result file. This script opens one or more Abaqus output database (ODB) files and exports the nodal coordinates from all 21 frames (reference frame 0 plus 20 subsequent frames) of the first analysis step to a plain-text file, providing the raw nodal displacement data used in the subsequent kinematic / strain-field analysis (e.g. deformation gradient, Green-Lagrange strain, "kinematic fingerprint" computation).
+
+### Requirements
+
+- **Abaqus/CAE** with the Abaqus Scripting Interface (Python 2 / `mbcs` encoding)
+- Uses only Abaqus-internal modules (`abaqus`, `abaqusConstants`, `odbAccess`)
+- Must be run from within Abaqus, with completed `.odb` result files (as produced by `001_ESN_builder.py` followed by an Abaqus/Standard analysis run) available in the working directory
+
+### How to run
+
+```
+abaqus python 006_Script_Coord_20Frames.py
+```
+
+### Configuration
+
+At the top of the script, the `files` list must be set to the ODB filenames to be processed:
+
+```python
+files = ['2024-05-26_R_200x6xlsm5_plast_viso0_91_UniAx_1.odb',
+         '2024-05-27_R_200x6xlsm5_plast_viso0_92_UniAx_2.odb']
+```
+
+Each listed ODB file is opened, processed, and closed in turn.
+
+### Workflow
+
+1. For each ODB file, opens the database and identifies the first analysis step.
+2. Accesses the `COORD` (nodal coordinate) field output for frames 0–20 (`frame_numbers = range(21)`).
+3. Iterates over every part instance in the root assembly and, for each instance, builds a lookup of nodal coordinates per frame.
+4. For every node, writes one line containing:
+   - part instance name and node label
+   - reference (frame 0) x/y coordinates
+   - x/y coordinates for each of the 21 frames
+5. Writes the result to a text file named `<odb_basename>_COORD.txt`, with a header row describing all columns.
+
+### Output file format
+
+One `.txt` file per input ODB, comma-separated, with the header:
+
+```
+Part_Instance, Node_ID, x_ref, y_ref, Frame_0_X, Frame_0_Y, Frame_1_X, Frame_1_Y, ..., Frame_20_X, Frame_20_Y
+```
+
+Each subsequent row corresponds to one mesh node, giving its reference position and its position at every extracted frame — the basis for the strain/kinematic-fingerprint analysis described in the manuscript.
+
+---
+
+## 3. `Matlab_012_RenderESN.mlx` – Rendering ESN Images
+
+### Purpose
+
+After creating the `.mat` file containing the `COORD` table (see Section A.5 of the supplementary documentation, produced by converting/loading the `_COORD.txt` output of `006_Script_Coord_20Frames.py` into MATLAB), `Matlab_012_RenderESN.mlx` renders grayscale line-drawing images of the ESN fiber network. By default, all 21 frames (frame 0 to frame 20) are rendered; this can be changed in line 65.
+
+### Requirements
+
+- MATLAB (tested as a MATLAB Live Script, `.mlx`)
+- No toolboxes beyond base MATLAB are required
+- Input: a `<...>_COORD.mat` file (containing table `COORD`, produced from the corresponding `_COORD.txt` file) and the matching `<...>_fiberstackorder.txt` file, both generated for the same Abaqus run by `001_ESN_builder.py` / `006_Script_Coord_20Frames.py`
+
+### Configuration
+
+Both required input files are specified at the top of the script:
+
+```matlab
+load('R_200x6xlsm5_plast_viso0_91_UniAx_1_COORD.mat');
+filename = '2024-05-26_R_200x6xlsm5_plast_viso0_91_UniAx_1_fiberstackorder.txt';
+```
+
+From line 12 onward, the following rendering parameters can be set:
+
+| Parameter | Meaning |
+|---|---|
+| `faktor_faser` | Fraction of fibers to render, selected from the top of the fiber stack (e.g. `0.8` → render the topmost 80% of fibers) |
+| `breite` | Membrane width; **must match the actual width of the rendered ESN** |
+| `gray_dark` | Brightness value (0–1) of the bottommost fiber |
+| `gray_bright` | Brightness value (0–1) of the topmost fiber |
+
+For the rendering to have correct physical dimensions, the fiber diameter must be set correctly in line 75 (default: `0.403`, matching `d_f` in `001_ESN_builder.py`):
+
+```matlab
+line_width_points = 0.403 / faktor;
+```
+
+### Workflow
+
+1. Loads the `COORD` table and the fiber stacking order (`fiberstackorder.txt`), and reduces the fiber set to the selected top fraction (`faktor_faser`) of the stack.
+2. For each retained fiber path, keeps only the first half of its points (bisection) and assigns a grayscale value along a linear gradient from `gray_bright` (topmost fiber) to `gray_dark` (bottommost fiber), compensating the gradient when `faktor_faser < 1`.
+3. For each frame (default: 0–20), plots every fiber as a line of the specified grayscale on a dark-gray background, with a line width scaled to the true fiber diameter and axes limited to the membrane width `breite`.
+4. Saves each frame as a PNG image (`plot_image_Frame_UD<frame_idx>.png`, 500 dpi).
+
+### Output files
+
+- `plot_image_Frame_UD0.png` … `plot_image_Frame_UD20.png` (or the frame range set in line 65) – rendered grayscale images of the ESN at each analyzed deformation state.
+
+---
+
+## 4. `Kinematic_Fingerprint_Analysis.mlx` – Kinematic Fingerprint Evaluation
+
+### Purpose
+
+This is the main MATLAB analysis script of the framework. It processes the nodal coordinates exported from Abaqus (`006_Script_Coord_20Frames.py`) to compute the local kinematic quantities described in the manuscript — the deformation gradient **F**, the Green-Lagrange strain components **E₁₁, E₂₂, E₁₂**, the local rotation angle **R**, and the deformation type exponent **m** — and assembles them into the statistical **kinematic fingerprint** of the electrospun network.
+
+### Requirements
+
+- MATLAB (tested as a MATLAB Live Script, `.mlx`)
+- No toolboxes beyond base MATLAB are required
+- Input: a `<...>_COORD.mat` file (table `COORD`, containing at least the columns `Part_Instance`, `Node_ID`, `Frame_0_X`, `Frame_0_Y`, `Frame_20_X`, `Frame_20_Y`) and the matching `<...>_fiberstackorder.txt` file
+- Optional: `Matlab_009_createPlots_FEM_Matlab_Q4_reference` (external plotting script, called if `plotKinematicFields = true`; not included in this file)
+
+### Configuration (User settings section)
+
+```matlab
+workingDirectory   = '...';                                        % folder containing the input files
+coordinateFile     = 'R_200x6xlsm5_plast_viso0_95_UniAx_0_COORDV1.mat';
+fiberStackOrderFile = '2024-05-26_R_200x6xlsm5_plast_viso0_95_UniAx_0_fiberstackorder.txt';
+
+fiberFractionUpper = 1.0;   % upper bound of the fiber-depth fraction to include
+fiberFractionLower = 0.5;   % lower bound (e.g. 0.8–1.0 selects the top 20% of fibers)
+
+facetWidths    = [10];      % facet width(s) b_q to analyze [µm]
+networkWidths  = [200];     % network width(s) b_n to analyze [µm]
+
+plotFacetSubdivision   = true;
+plotKinematicFields    = true;
+plotFingerprintHistograms = true;
+```
+
+Several `facetWidths` and `networkWidths` values can be supplied as vectors to sweep over multiple facet/network size combinations in a single run.
+
+### Workflow
+
+1. **Load input data** – loads the `COORD` table and validates that all required columns (`Frame_0_X/Y`, `Frame_20_X/Y`, `Part_Instance`, `Node_ID`) are present.
+2. **Region cropping** – for each requested network width `b_n`, crops the nodal point cloud to the corresponding centered square region.
+3. **Fiber-depth selection** – reads the fiber stacking order and keeps only the nodes belonging to the fiber fraction defined by `fiberFractionLower`/`fiberFractionUpper` (depth-resolved analysis).
+4. **Unique node IDs** – combines `Part_Instance` and `Node_ID` into a single unique node identifier, since Abaqus node labels may repeat across part instances.
+5. **Facet grid & facet centers** – subdivides the analysis region into a grid of square facets of width `b_q` (representative area elements, RAE), assigns nodes to facets, and computes the geometric facet center as the arithmetic mean of all node coordinates within each facet, both in the reference (frame 0) and current (frame 20) configuration.
+6. **Local Q4-based kinematics** – treats each 2×2 block of neighboring facet centers as a bilinear (Q4) element and, at each of its four corners, computes:
+   - the deformation gradient **F = I + ∇u** from the Q4 shape-function derivatives and the corner displacements,
+   - the Green-Lagrange strain **E = ½(FᵀF − I)** (components E₁₁, E₂₂, E₁₂),
+   - the local rotation angle via polar decomposition of **F** (`polar_rotation_2D`),
+   - the deformation type exponent **m**, derived from the eigenvalues of the right Cauchy-Green tensor **C = FᵀF** (`deformation_type_exponent`; distinguishes uniaxial/equibiaxial/planar-type local deformation).
+
+   These four **non-averaged** corner states per element form the basis of the kinematic fingerprint.
+7. **Averaged fields for visualization** – **F** is averaged across all element corners contributing to a given facet center; E, R, and m for the plotted fields are then computed from this averaged **F** (not averaged individually), consistent with the manuscript's methodology.
+8. **Kinematic fingerprint assembly** – the non-averaged local E₁₁, E₂₂, E₁₂, R, and m values are flattened into fingerprint vectors, invalid (NaN) states are removed, and a fingerprint table plus summary statistics (mean, standard deviation) are compiled.
+9. **Plotting** (optional, controlled by the `plot...` flags) – facet subdivision and displacement field, averaged kinematic fields (via the external `Matlab_009_createPlots_FEM_Matlab_Q4_reference` script), and histograms of the fingerprint distributions (E₁₁, E₂₂, E₁₂, R, m).
+10. **Results storage** – all results per network-width/facet-width combination are stored in the `resultsBySetting` cell array (containing raw, averaged, and fingerprint data), and convenience variables (`E11_vec`, `E22_vec`, `E12_vec`, `R_vec`, `R_rad_vec`, `m_vec`, `fingerprint_table`, `stats`) are exposed for the last analyzed setting.
+
+### Local functions (defined at the end of the script)
+
+- `q4_shape_function_derivatives(xi, eta)` – derivatives of the bilinear Q4 shape functions with respect to natural coordinates.
+- `polar_rotation_2D(F)` – rotation tensor from the polar decomposition of a 2D deformation gradient (via SVD), with correction for numerical reflections.
+- `deformation_type_exponent(F)` – computes the deformation type exponent **m** from the invariants of **C = FᵀF**, with dedicated handling of the reference/undeformed state and the equibiaxial case.
+
+### Output
+
+- MATLAB workspace variables and the `resultsBySetting` cell array, containing per-setting facet centers, displacement fields, non-averaged local kinematic quantities, averaged fields for visualization, and the fingerprint table/statistics.
+- Figures (if enabled): facet subdivision plot, averaged kinematic field plots, and kinematic fingerprint histograms.
+
+---
+
+## Relation to the manuscript
+
+`001_ESN_builder.py` generates the ESN RVE realizations that are subsequently subjected to virtual mechanical loading (uniaxial, planar tension, simple shear) in Abaqus. `006_Script_Coord_20Frames.py` extracts the resulting nodal coordinate histories from the simulation output. `Matlab_012_RenderESN.mlx` renders these coordinate histories into grayscale ESN images for visual inspection and figures. `Kinematic_Fingerprint_Analysis.mlx` performs the core continuum-mechanics-based evaluation described in the manuscript — RAE-based facet-center kinematics and the resulting "kinematic fingerprint" (E₁₁, E₂₂, E₁₂, R, m) — that forms the main quantitative result of the study.
