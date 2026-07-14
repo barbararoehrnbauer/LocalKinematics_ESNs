@@ -392,8 +392,4 @@ To make the analysis and rendering scripts (Sections 4 and 5) runnable out of th
 
 These files allow `D_Kinematic_Fingerprint_Analysis.mlx` and `E_RenderESN.mlx` to be run and inspected without needing Abaqus or access to `A_ESN_builder.py` / `B_Script_Coord_20Frames.py` / `C_Import_COORD.m`.
 
----
 
-## Relation to the manuscript
-
-`A_ESN_builder.py` generates the ESN RVE realizations that are subsequently subjected to virtual mechanical loading (uniaxial, planar tension, simple shear) in Abaqus. `B_Script_Coord_20Frames.py` extracts the resulting nodal coordinate histories from the simulation output. `C_Import_COORD.m` imports these coordinate histories into MATLAB. `D_Kinematic_Fingerprint_Analysis.mlx` performs the core continuum-mechanics-based evaluation described in the manuscript — RAE-based facet-center kinematics and the resulting "kinematic fingerprint" (E₁₁, E₂₂, E₁₂, R, m) — that forms the main quantitative result of the study. `E_RenderESN.mlx` renders the coordinate histories into grayscale ESN images for visual inspection and figures.
