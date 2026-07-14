@@ -193,9 +193,6 @@ name = '2024-09-13_R_40x1xlsm5_plast_viso0_49_UniAx_0_COORD';
 
 - `<name_without_date_prefix>.mat` – MATLAB file containing the table `COORD`, ready to be loaded by `D_Kinematic_Fingerprint_Analysis.mlx` and `E_RenderESN.mlx`.
 
-### Note
-
-The column-stripping logic (step 3) and the filename truncation (`name(1,12:end)`) assume the standard 11-character date prefix used in the file-naming convention of `A_ESN_builder.py`/`B_Script_Coord_20Frames.py` (e.g. `2024-09-13_`). If a different naming convention is used, this indexing must be adjusted accordingly.
 
 ---
 
