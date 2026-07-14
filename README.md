@@ -377,19 +377,3 @@ fibre_network_frame_20.png
 ```
 
 Each image represents the ESN fibre network at one analysed deformation state.
-
----
-
-## Included example data files
-
-To make the analysis and rendering scripts (Sections 4 and 5) runnable out of the box, this repository includes one example dataset (network width 200 µm, uniaxial loading), consisting of:
-
-| File | Produced by | Used by |
-|---|---|---|
-| `R_200x6xlsm5_plast_viso0_9_UniAx_0_COORD.mat` | `C_Import_COORD.m` | `D_Kinematic_Fingerprint_Analysis.mlx`, `E_RenderESN.mlx` |
-| `2024-05-26_R_200x6xlsm5_plast_viso0_9_UniAx_0_fiberstackorder.txt` | `A_ESN_builder.py` | `D_Kinematic_Fingerprint_Analysis.mlx`, `E_RenderESN.mlx` |
-| `Matlab_009_createPlots_FEM_Matlab_Q4_reference.m` | – (standalone plotting helper) | `D_Kinematic_Fingerprint_Analysis.mlx` (when `plotKinematicFields = true`) |
-
-These files allow `D_Kinematic_Fingerprint_Analysis.mlx` and `E_RenderESN.mlx` to be run and inspected without needing Abaqus or access to `A_ESN_builder.py` / `B_Script_Coord_20Frames.py` / `C_Import_COORD.m`.
-
-
