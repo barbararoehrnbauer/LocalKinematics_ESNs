@@ -15,7 +15,7 @@ Affiliation:
 
 **ZHAW School of Engineering, IMES Institute of Mechanical Systems, Technikumstrasse 71, 8401 Winterthur, Switzerland**
 
-This repository contains the simulation, post-processing, and analysis code used in the study described in the accompanying manuscript, which introduces a continuum-mechanics-based framework for quantifying local kinematics in electrospun fiber networks (ESN):
+This repository contains the simulation, post-processing, and analysis code used in the study, which introduces a continuum-mechanics-based framework for quantifying local kinematics in electrospun fiber networks (ESN):
 
 1. **`A_ESN_builder.py`** (Abaqus/Python) – generates parametric representative volume elements (RVEs) of electrospun fiber networks, meshes them, applies crosslinks and periodic boundary conditions (PBC), and sets up an Abaqus job for finite element (FE) analysis.
 2. **`B_Script_Coord_20Frames.py`** (Abaqus/Python) – post-processes the resulting Abaqus output database (ODB) files by extracting nodal coordinates over all analysis frames, providing the raw kinematic data required for strain-field analysis of the simulated ESN.
