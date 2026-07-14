@@ -17,16 +17,17 @@ Affiliation:
 
 This repository contains the simulation, post-processing, and analysis code used in the study described in the accompanying manuscript, which introduces a continuum-mechanics-based framework for quantifying local kinematics in electrospun fiber networks (ESN):
 
-1. **`001_ESN_builder.py`** (Abaqus/Python) – generates parametric representative volume elements (RVEs) of electrospun fiber networks, meshes them, applies crosslinks and periodic boundary conditions (PBC), and sets up an Abaqus job for finite element (FE) analysis.
-2. **`002_Script_Coord_20Frames.py`** (Abaqus/Python) – post-processes the resulting Abaqus output database (ODB) files by extracting nodal coordinates over all analysis frames, providing the raw kinematic data required for strain-field analysis of the simulated ESN.
-3. **`003_RenderESN.mlx`** (MATLAB) – renders the ESN fiber network as grayscale line-drawing images for each analyzed frame, based on the exported nodal coordinates.
-4. **`004_Kinematic_Fingerprint_Analysis.mlx`** (MATLAB) – the main evaluation script: computes local deformation gradients, Green-Lagrange strains, local rotation, and the deformation type exponent from the facet centers of the ESN, and assembles the resulting "kinematic fingerprint" of the network.
+1. **`A_ESN_builder.py`** (Abaqus/Python) – generates parametric representative volume elements (RVEs) of electrospun fiber networks, meshes them, applies crosslinks and periodic boundary conditions (PBC), and sets up an Abaqus job for finite element (FE) analysis.
+2. **`B_Script_Coord_20Frames.py`** (Abaqus/Python) – post-processes the resulting Abaqus output database (ODB) files by extracting nodal coordinates over all analysis frames, providing the raw kinematic data required for strain-field analysis of the simulated ESN.
+3. **`C_RenderESN.mlx`** (MATLAB) – renders the ESN fiber network as grayscale line-drawing images for each analyzed frame, based on the exported nodal coordinates.
+4. **`D_Import_COORD.m`** (MATLAB) – imports the nodal coordinate text file exported by `B_Script_Coord_20Frames.py` into a MATLAB table `COORD` and saves it as a `.mat` file, ready for use by `C_RenderESN.mlx` and `E_Kinematic_Fingerprint_Analysis.mlx`.
+5. **`E_Kinematic_Fingerprint_Analysis.mlx`** (MATLAB) – the main evaluation script: computes local deformation gradients, Green-Lagrange strains, local rotation, and the deformation type exponent from the facet centers of the ESN, and assembles the resulting "kinematic fingerprint" of the network.
 
-Scripts 1 and 2 must be run within an **Abaqus/CAE Python (kernel) environment**; they rely exclusively on Abaqus-internal modules and are not intended to run as standalone Python scripts. Scripts 3 and 4 are **MATLAB Live Scripts** and are run in MATLAB, using the `.mat` coordinate files produced from the `_COORD.txt` output of script 2 (see below) as their input.
+Scripts 1 and 2 must be run within an **Abaqus/CAE Python (kernel) environment**; they rely exclusively on Abaqus-internal modules and are not intended to run as standalone Python scripts. Scripts 3–5 are run in **MATLAB**. `D_Import_COORD.m` must be run first, converting the `_COORD.txt` output of script 2 into the `.mat` file used as input by `C_RenderESN.mlx` and `E_Kinematic_Fingerprint_Analysis.mlx` (see below).
 
 ---
 
-## 1. `001_ESN_builder.py` – ESN Network Generation
+## 1. `A_ESN_builder.py` – ESN Network Generation
 
 ### Purpose
 
@@ -48,7 +49,7 @@ Generates fully parametric ESN RVE models, ready for FE simulation, including:
 ### How to run
 
 ```
-abaqus cae noGUI=001_ESN_builder.py
+abaqus cae noGUI=A_ESN_builder.py
 ```
 
 or within Abaqus: File->Run Script
@@ -92,7 +93,7 @@ A new model (`Mdb()`) is created for every generated configuration, to avoid con
 
 ---
 
-## 2. `002_Script_Coord_20Frames.py` – Nodal Coordinate Extraction
+## 2. `B_Script_Coord_20Frames.py` – Nodal Coordinate Extraction
 
 ### Purpose
 
@@ -102,12 +103,12 @@ To analyze the strain fields of a simulated ESN, the mesh node coordinates must 
 
 - **Abaqus/CAE** with the Abaqus Scripting Interface (Python 2 / `mbcs` encoding)
 - Uses only Abaqus-internal modules (`abaqus`, `abaqusConstants`, `odbAccess`)
-- Must be run from within Abaqus, with completed `.odb` result files (as produced by `001_ESN_builder.py` followed by an Abaqus/Standard analysis run) available in the working directory
+- Must be run from within Abaqus, with completed `.odb` result files (as produced by `A_ESN_builder.py` followed by an Abaqus/Standard analysis run) available in the working directory
 
 ### How to run
 
 ```
-abaqus python 002_Script_Coord_20Frames.py
+abaqus python B_Script_Coord_20Frames.py
 
 or within Abaqus: File->Run Script
 ```
@@ -146,13 +147,11 @@ Each subsequent row corresponds to one mesh node, giving its reference position 
 
 ---
 
-## 3. `003_RenderESN.mlx` – Rendering ESN Images
+## 3. `C_RenderESN.mlx` – Rendering ESN Images
 
 ### Purpose
 
-After creating the `.mat` file containing the `COORD` table, `003_RenderESN.mlx` renders greyscale line-drawing images of the ESN fibre network.
-
-The `COORD` table is obtained by converting or loading the `_COORD.txt` output generated by `002_Script_Coord_20Frames.py` into MATLAB, as described in Section A.5 of the supplementary documentation.
+After creating the `.mat` file containing the `COORD` table (via `D_Import_COORD.m`, see Section 4), `C_RenderESN.mlx` renders greyscale line-drawing images of the ESN fibre network.
 
 By default, all 21 deformation states, from frame 0 to frame 20, are rendered. The frame range can be changed in the following loop:
 
@@ -164,10 +163,10 @@ for frame_index = 0:20
 
 * MATLAB, tested as a MATLAB Live Script (`.mlx`)
 * No toolboxes beyond base MATLAB are required
-* A `<...>_COORD.mat` file containing the table `COORD`
+* A `<...>_COORD.mat` file containing the table `COORD` (produced by `D_Import_COORD.m`)
 * The corresponding `<...>_fiberstackorder.txt` file
 
-Both input files must originate from the same Abaqus simulation generated using `001_ESN_builder.py` and processed using `002_Script_Coord_20Frames.py`.
+Both input files must originate from the same Abaqus simulation generated using `A_ESN_builder.py` and processed using `B_Script_Coord_20Frames.py`.
 
 ### Configuration
 
@@ -199,7 +198,7 @@ darkest_grey_value = 0.10;
 brightest_grey_value = 0.85;
 ```
 
-To preserve the correct physical fibre thickness in the rendered image, the fibre diameter must correspond to `d_f` used in `001_ESN_builder.py`.
+To preserve the correct physical fibre thickness in the rendered image, the fibre diameter must correspond to `d_f` used in `A_ESN_builder.py`.
 
 The default value is:
 
@@ -247,17 +246,58 @@ fibre_network_frame_20.png
 
 Each image represents the ESN fibre network at one analysed deformation state.
 
-## 4. `004_Kinematic_Fingerprint_Analysis.mlx` – Kinematic Fingerprint Evaluation
+---
+
+## 4. `D_Import_COORD.m` – Importing the Nodal Coordinate File into MATLAB
 
 ### Purpose
 
-This is the main MATLAB analysis script of the framework. It processes the nodal coordinates exported from Abaqus (`002_Script_Coord_20Frames.py`) to compute the local kinematic quantities described in the manuscript — the deformation gradient **F**, the Green-Lagrange strain components **E₁₁, E₂₂, E₁₂**, the local rotation angle **R**, and the deformation type exponent **m** — and assembles them into the statistical **kinematic fingerprint** of the electrospun network.
+Converts the plain-text nodal coordinate file exported by `B_Script_Coord_20Frames.py` (`<...>_COORD.txt`) into a MATLAB table `COORD` and saves it as a `.mat` file. This `.mat` file is the required input for both `C_RenderESN.mlx` (Section 3) and `E_Kinematic_Fingerprint_Analysis.mlx` (Section 5), so `D_Import_COORD.m` must be run once for every simulation before either of those scripts is used.
+
+### Requirements
+
+- MATLAB (tested as a plain `.m` script)
+- No toolboxes beyond base MATLAB are required
+- Input: the `<...>_COORD.txt` file produced by `B_Script_Coord_20Frames.py`, located in the current working directory
+
+### Configuration
+
+The name of the coordinate file (without the `.txt` extension) is set at the top of the script:
+
+```matlab
+name = '2024-09-13_R_40x1xlsm5_plast_viso0_49_UniAx_0_COORD';
+```
+
+### Workflow
+
+1. Clears the workspace and command window.
+2. Detects the import options for the `<name>.txt` file (`detectImportOptions`) and forces all variables to type `double`.
+3. Configures the `Part_Instance` column to strip non-numeric characters and thousands separators (`,`), so the Abaqus part-instance label is imported as a numeric value consistent with the rest of the table.
+4. Reads the file into the table `COORD` using `readtable`.
+5. Removes the first three rows of the imported table (`COORD(1:3, :) = []`), which correspond to header/metadata rows not needed for the analysis.
+6. Saves `COORD` to a `.mat` file, using the input filename with the leading date stamp removed (`name(1,12:end)`), e.g. `R_40x1xlsm5_plast_viso0_49_UniAx_0_COORD.mat`.
+
+### Output file
+
+- `<name_without_date_prefix>.mat` – MATLAB file containing the table `COORD`, ready to be loaded by `C_RenderESN.mlx` and `E_Kinematic_Fingerprint_Analysis.mlx`.
+
+### Note
+
+The column-stripping logic (step 3) and the filename truncation (`name(1,12:end)`) assume the standard 11-character date prefix used in the file-naming convention of `A_ESN_builder.py`/`B_Script_Coord_20Frames.py` (e.g. `2024-09-13_`). If a different naming convention is used, this indexing must be adjusted accordingly.
+
+---
+
+## 5. `E_Kinematic_Fingerprint_Analysis.mlx` – Kinematic Fingerprint Evaluation
+
+### Purpose
+
+This is the main MATLAB analysis script of the framework. It processes the nodal coordinates exported from Abaqus (`B_Script_Coord_20Frames.py`, imported via `D_Import_COORD.m`) to compute the local kinematic quantities described in the manuscript — the deformation gradient **F**, the Green-Lagrange strain components **E₁₁, E₂₂, E₁₂**, the local rotation angle **R**, and the deformation type exponent **m** — and assembles them into the statistical **kinematic fingerprint** of the electrospun network.
 
 ### Requirements
 
 - MATLAB (tested as a MATLAB Live Script, `.mlx`)
 - No toolboxes beyond base MATLAB are required
-- Input: a `<...>_COORD.mat` file (table `COORD`, containing at least the columns `Part_Instance`, `Node_ID`, `Frame_0_X`, `Frame_0_Y`, `Frame_20_X`, `Frame_20_Y`) and the matching `<...>_fiberstackorder.txt` file
+- Input: a `<...>_COORD.mat` file (table `COORD`, containing at least the columns `Part_Instance`, `Node_ID`, `Frame_0_X`, `Frame_0_Y`, `Frame_20_X`, `Frame_20_Y`, produced by `D_Import_COORD.m`) and the matching `<...>_fiberstackorder.txt` file
 - Optional: `Matlab_009_createPlots_FEM_Matlab_Q4_reference` (external plotting script, called if `plotKinematicFields = true`; not included in this file)
 
 ### Configuration (User settings section)
@@ -314,4 +354,4 @@ Several `facetWidths` and `networkWidths` values can be supplied as vectors to s
 
 ## Relation to the manuscript
 
-`001_ESN_builder.py` generates the ESN RVE realizations that are subsequently subjected to virtual mechanical loading (uniaxial, planar tension, simple shear) in Abaqus. `002_Script_Coord_20Frames.py` extracts the resulting nodal coordinate histories from the simulation output. `003_RenderESN.mlx` renders these coordinate histories into grayscale ESN images for visual inspection and figures. `004_Kinematic_Fingerprint_Analysis.mlx` performs the core continuum-mechanics-based evaluation described in the manuscript — RAE-based facet-center kinematics and the resulting "kinematic fingerprint" (E₁₁, E₂₂, E₁₂, R, m) — that forms the main quantitative result of the study.
+`A_ESN_builder.py` generates the ESN RVE realizations that are subsequently subjected to virtual mechanical loading (uniaxial, planar tension, simple shear) in Abaqus. `B_Script_Coord_20Frames.py` extracts the resulting nodal coordinate histories from the simulation output. `D_Import_COORD.m` imports these coordinate histories into MATLAB. `C_RenderESN.mlx` renders them into grayscale ESN images for visual inspection and figures. `E_Kinematic_Fingerprint_Analysis.mlx` performs the core continuum-mechanics-based evaluation described in the manuscript — RAE-based facet-center kinematics and the resulting "kinematic fingerprint" (E₁₁, E₂₂, E₁₂, R, m) — that forms the main quantitative result of the study.
