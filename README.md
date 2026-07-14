@@ -200,7 +200,7 @@ name = '2024-09-13_R_40x1xlsm5_plast_viso0_49_UniAx_0_COORD';
 
 ### Purpose
 
-This is the main MATLAB analysis script of the framework. It processes the nodal coordinates exported from Abaqus (`B_Script_Coord_20Frames.py`, imported via `C_Import_COORD.m`) to compute the local kinematic quantities described in the manuscript — the deformation gradient **F**, the Green-Lagrange strain components **E₁₁, E₂₂, E₁₂**, the local rotation angle **R**, and the deformation type exponent **m** — and assembles them into the statistical **kinematic fingerprint** of the electrospun network.
+This is the main MATLAB analysis script of the framework. It processes the nodal coordinates exported from Abaqus (`B_Script_Coord_20Frames.py`, imported via `C_Import_COORD.m`) to compute the local kinematic quantities described in the manuscript — the deformation gradient **F**, the Green-Lagrange strain components **E₁₁, E₂₂, E₁₂**, the local rotation angle **R**, and the deformation type exponent **m**  and assembles them into the statistical kinematic fingerprint of the electrospun network.
 
 ### Requirements
 
