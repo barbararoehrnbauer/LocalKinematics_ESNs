@@ -22,8 +22,8 @@ import operator
 
 
 n_odb = 1 # Number of ESN to be generated per ESN configuration
-b_ns = [40] # List of widths to be generated
-t_ns = [1] # List of thickness to be generated
+b_ns = [120] # List of widths to be generated
+t_ns = [2.5] # List of thickness to be generated
 for t_i in t_ns:
     for b_i in b_ns:
         for i in range(n_odb):
@@ -45,12 +45,6 @@ for t_i in t_ns:
             # LoadCase = 'PlanarTension'
             # LoadCase = 'SimpleShear'
 
-            # choose one of two:   
-            # #sinusoidal fibre generation with mirroring operations for PBC
-            #FibreType = 'Sinusoidal' 
-            # randomwalk fibre generation where PBC is linked between end of initial fibre & start of following fibre
-            FibreType = 'RandomWalk'    
-
             ###############################################################
             # set parameters by known material
             # general
@@ -62,15 +56,8 @@ for t_i in t_ns:
             por = 0.87 # porosity of material,
             # curvature stuff
             # Isotropy
-            Alg = 1     # Alignment value (0,1]: 1= isotropic, 0= all fibres left to right in one line
-                        # only work in RW so far
-            # sinusoidal specific
-            xi_f_av = 7.42          # average amplitude of sine wave function describing a fibre in um
-            xi_f_stdev = 4.82       # Standard deviation of amplitude
-            delta_f_av = 130.57     # wavelength of sine wave function describing a fibre in um
-            delta_f_stdev = 109.49  # Standard deviation of wavelength
-            delta_f_min = 32        # minimum wavelength
-            # RandomWalk specific
+            Alg = 1     # Alignment value (0,1]: 1= isotropic, 0= all fibres left to right in one line           
+            # RandomWalk specific parameters
             ang_av = 0.138380645
             ang_stdev = 0.124080001
             ang_min = 0.001207973
@@ -78,7 +65,6 @@ for t_i in t_ns:
 
             ###############################################################
             # Performance parameters
-            SplinePoints = 16 # nunmer of interpolation points within one wavelength of a fibre (sinusoidal)
             l_step = 3              # segment length in um (distance between two points of the spline)
             res_fp = 0.5 # fibre crosslinking range & subsequent partitioning size
 
@@ -94,7 +80,7 @@ for t_i in t_ns:
 
             # save stuff in model file for later retrieval if necessary
             mdb.customData.savefloats = [b_n, eps11, eps12, res_fp, t_n,l_s_mean]
-            mdb.customData.saveStrings = [FibreType,LoadCase]
+            mdb.customData.saveStrings = [LoadCase]
 
 
             ######################################################################################################################
@@ -130,80 +116,93 @@ for t_i in t_ns:
             m.historyOutputRequests['H-Output-1'].setValues(
                 timeInterval=0.05, variables=('ALLSE', 'ALLSD', 'ETOTAL','ALLKE','ALLWK','ALLPD'))
 
-            # Sinusoidal fibre generation
-            if FibreType == 'Sinusoidal':
-                # fibre creation
-                AccLength = 0
-                fibrecount = 0
-                x_rand = []
-                y_rand = []
-                angle_rand = []
-                xi_f =[]
-                delta_f = []
-                res_f = []
-                while AccLength < TotalFibreLength: 
-                    NoP = 'F'+str(fibrecount*4) # construct name of part
+            # randomwalk fibre generation
+            fibrecount = 0
+            AccLength = 0
+            ang_dev = []
+            ang_dev.append(min(max(random.normalvariate(ang_av,ang_stdev),ang_min),ang_max))
+            angle_rand = []
+            # Define the coordinates of the rectangular area to keep (x_min, y_min) to (x_max, y_max)
+            x_min = -float(b_n)/2
+            y_min = -float(b_n)/2
+            x_max = float(b_n)/2
+            y_max = float(b_n)/2
+            #defining the start point as the bottom left corner to hold still in PBCs
+            points = []
+            x = x_min
+            y = y_min
+            points.append((x,y))
 
-                    # tbd randomized parameters
-                    x_rand.append(random.uniform(-b_2,b_2))
-                    y_rand.append(random.uniform(-b_2,b_2))
-                    angle_rand.append(random.uniform(float(0),float(360)))
-                    xi_f.append(abs(random.normalvariate(xi_f_av,xi_f_stdev)))
-                    delta_f.append(max(abs(random.normalvariate(delta_f_av,delta_f_stdev)),delta_f_min))
-                    res_f.append(int(math.ceil(float(delta_f[fibrecount])/SplinePoints))) # fibre curvature resolution rounded to int
+            Puncture_LR = 0
+            Puncture_UD = 0
 
-                    # debugging outputs
-                    print(fibrecount) 
-                    # print(x_rand[fibrecount])
-                    # print(y_rand[fibrecount])
-                    # print(angle_rand[fibrecount])
+            ang_n = 45 # start angle at 45°
+            while AccLength<(TotalFibreLength): # create a bunch of fibers
+                
+                NoP = 'F'+str(fibrecount) # construct name of part
+                
+                
+                # sketch creation
+                m.ConstrainedSketch(name='__profile__', sheetSize=b_n)
+                if len(points)>1: # this makes sure the angle of a newly started fibre cannot shift outside the boundaries
+                    ang_n = ang_n+random.uniform(-ang_dev[fibrecount],ang_dev[fibrecount]) #variate the angle between segments
+                x_old = x
+                y_old = y
+                dx = math.cos(ang_n)*l_step
+                dy = math.sin(ang_n)*l_step
+                x = x_old+math.cos(ang_n)*l_step # create next point x
+                y = y_old+math.sin(ang_n)*l_step*Alg # create next point y
+                new_ang_n = math.atan((y-y_old)/(x-x_old)) #account for the parameter Alg, calculate the made real angle
+                points.append((x,y))
+                angle_rand.append(math.degrees(new_ang_n)%360)    
+                
+                # check if new point penetrated any rve boundaries & if so, create a part out of existing splinepoints 
+                # & lay foundation for next part
+                if abs(x) > x_max or abs(y)> y_max:
+                #Figure out where it crossed exactly and trim the last point to be on the boundary
+                    if x > x_max:
+                        x_end = x_max
+                        y_end = (x_max-x_old)/(x-x_old)*(y-y_old)+y_old
+                        points[-1] = (x_end,y_end)
+                        x_new = x_min # define startpoints for next fibre
+                        y_new = y_end
+                        Puncture_LR += 1
+                    elif x < x_min:
+                        x_end = x_min
+                        y_end = (x_min-x_old)/(x-x_old)*(y-y_old)+y_old
+                        points[-1] = (x_end,y_end)
+                        x_new = x_max
+                        y_new = y_end
+                        Puncture_LR += 1
+                    if y > y_max:
+                        y_end = y_max
+                        x_end = (y_max-y_old)/(y-y_old)*(x-x_old)+x_old
+                        points[-1] = (x_end,y_end)
+                        x_new = x_end
+                        y_new = y_min
+                        Puncture_UD += 1
+                    elif y < y_min:
+                        y_end = y_min
+                        x_end = (y_min-y_old)/(y-y_old)*(x-x_old)+x_old
+                        points[-1] = (x_end,y_end)
+                        x_new = x_end
+                        y_new = y_max
+                        Puncture_UD += 1
+                    x = x_new
+                    y = y_new
 
-                    ## modelling
-                    #part 1: sketch creation
-                    m.ConstrainedSketch(name='__profile__', sheetSize=b_n)
-                    a = m.rootAssembly
-
-                    # create a single spline representing the sine curve
-                    points = []
-                    for x in range(int(-1.5*b_n), int(1.5*b_n), res_f[fibrecount]):
-                        y = xi_f[fibrecount] * math.sin(2 * pi * x / delta_f[fibrecount])
-                        points.append((x, y))
+                    print(AccLength)
 
                     sketch = m.sketches['__profile__']
-                    sketch.Spline(points=points)
-
-                    # rotate & translate the spline
-                    spline = sketch.geometry.values()[0]  # Assuming it's the only entity in the sketch
-                    sketch.rotate(angle=angle_rand[fibrecount], centerPoint=(0.0, 0.0), objectList=[spline])
-                    sketch.move(objectList=[spline], vector=(x_rand[fibrecount], y_rand[fibrecount]))
-                    
-                    # Define the coordinates of the rectangular area to keep (x_min, y_min) to (x_max, y_max)
-                    x_min = -b_2
-                    y_min = -b_2
-                    x_max = b_2
-                    y_max = b_2
-                    
-                    # find positions of the ends of the spline for removal purposes
-                    pos1 = sketch.vertices[0].coords
-                    pos2 = sketch.vertices[len(sketch.vertices)-1].coords
-                    
-                    # rectangle creation and setting to construction
-                    sketch.rectangle(point1=(x_min,y_min),point2=(x_max,y_max))
-                    sketch.setAsConstruction(objectList=(sketch.geometry.values()[1:5]))
-                    
-                    #trim curve to fit into RVE using the found endpoints
-                    sketch.autoTrimCurve(curve1=sketch.geometry[2],point1=pos1)
-                    sketch.autoTrimCurve(curve1=sketch.geometry[7],point1=pos2)
-
-                    #finishing the sketch
-                    m.Part(dimensionality=TWO_D_PLANAR, name=NoP, type=
-                        DEFORMABLE_BODY)
+                    sketch.Spline(points=points)         
+                    points = [] # clear out old path 
+                    points.append((x,y))           
+                    m.Part(dimensionality=TWO_D_PLANAR, name=NoP, type=DEFORMABLE_BODY)
                     m.parts[NoP].BaseWire(sketch=sketch)
                     del sketch
-                    
-                    # adding up the total length of fiber already "spun"
+                    # add up partlength
                     partlength = m.parts[NoP].edges[0].getSize()
-                    AccLength += partlength*4
+                    AccLength += partlength
                     # creating sets 
                     pos1 = m.parts[NoP].vertices[0].pointOn
                     pos2 = m.parts[NoP].vertices[1].pointOn
@@ -215,157 +214,18 @@ for t_i in t_ns:
                         m.parts[NoP].vertices.findAt(pos2))    
                     m.parts[NoP].Set(edges=
                     m.parts[NoP].edges.findAt(pos3), name='fibre')
-                    
+
                     # Assign section & beam orientation
-                    m.parts[NoP].SectionAssignment(offset=0.0, 
+                    m.parts[NoP].SectionAssignment(offset=0.0,
                         offsetField='', offsetType=MIDDLE_SURFACE, region=
                         m.parts[NoP].sets['fibre'], sectionName=
                         'Circular_Beam', thicknessAssignment=FROM_SECTION)
                     m.parts[NoP].assignBeamSectionOrientation(method=
                         N1_COSINES, n1=(0.0, 0.0, -1.0), region=
                         m.parts[NoP].sets['fibre'])
-                    
-                    
-                    #create mirroring planes
-                    m.parts[NoP].DatumPlaneByPrincipalPlane(offset=0.0,
-                        principalPlane=XZPLANE)
-                    m.parts[NoP].DatumPlaneByPrincipalPlane(offset=0.0,
-                        principalPlane=YZPLANE)
-                    
 
-                    # create mirrored copies
-                    NoP_x = 'F'+str(fibrecount*4+1) # construct name of part -X
-                    m.Part(name=NoP_x, objectToCopy=
-                        m.parts[NoP])
-                    m.parts[NoP_x].Mirror(keepOriginal=OFF, mirrorPlane=
-                        m.parts[NoP_x].datums[5])
-                    
-                    NoP_y = 'F'+str(fibrecount*4+2) # construct name of part -Y
-                    m.Part(name=NoP_y, objectToCopy=
-                        m.parts[NoP])
-                    m.parts[NoP_y].Mirror(keepOriginal=OFF, mirrorPlane=
-                        m.parts[NoP_y].datums[6])
-                    
-                    NoP_xy = 'F'+str(fibrecount*4+3) # construct name of part -XY
-                    m.Part(name=NoP_xy, objectToCopy=
-                        m.parts[NoP_x])
-                    m.parts[NoP_xy].Mirror(keepOriginal=OFF, mirrorPlane=
-                        m.parts[NoP_xy].datums[6])
-
-                    fibrecount += 1 # iterate partnumber
-                    # sinusoidal part generation finished at this point --> from now on we work in assembly   
-
-            # randomwalk fibre generation
-            elif FibreType == 'RandomWalk':
-                fibrecount = 0
-                AccLength = 0
-                ang_dev = []
-                ang_dev.append(min(max(random.normalvariate(ang_av,ang_stdev),ang_min),ang_max))
-                angle_rand = []
-                # Define the coordinates of the rectangular area to keep (x_min, y_min) to (x_max, y_max)
-                x_min = -float(b_n)/2
-                y_min = -float(b_n)/2
-                x_max = float(b_n)/2
-                y_max = float(b_n)/2
-                #defining the start point as the bottom left corner to hold still in PBCs
-                points = []
-                x = x_min
-                y = y_min
-                points.append((x,y))
-
-                Puncture_LR = 0
-                Puncture_UD = 0
-
-                ang_n = 45 # start angle at 45°
-                while AccLength<(TotalFibreLength): # create a bunch of fibers
-                    
-                    NoP = 'F'+str(fibrecount) # construct name of part
-                    
-                    
-                    # sketch creation
-                    m.ConstrainedSketch(name='__profile__', sheetSize=b_n)
-                    if len(points)>1: # this makes sure the angle of a newly started fibre cannot shift outside the boundaries
-                        ang_n = ang_n+random.uniform(-ang_dev[fibrecount],ang_dev[fibrecount]) #variate the angle between segments
-                    x_old = x
-                    y_old = y
-                    dx = math.cos(ang_n)*l_step
-                    dy = math.sin(ang_n)*l_step
-                    x = x_old+math.cos(ang_n)*l_step # create next point x
-                    y = y_old+math.sin(ang_n)*l_step*Alg # create next point y
-                    new_ang_n = math.atan((y-y_old)/(x-x_old)) #account for the parameter Alg, calculate the made real angle
-                    points.append((x,y))
-                    angle_rand.append(math.degrees(new_ang_n)%360)    
-                    
-                    # check if new point penetrated any rve boundaries & if so, create a part out of existing splinepoints 
-                    # & lay foundation for next part
-                    if abs(x) > x_max or abs(y)> y_max:
-                    #Figure out where it crossed exactly and trim the last point to be on the boundary
-                        if x > x_max:
-                            x_end = x_max
-                            y_end = (x_max-x_old)/(x-x_old)*(y-y_old)+y_old
-                            points[-1] = (x_end,y_end)
-                            x_new = x_min # define startpoints for next fibre
-                            y_new = y_end
-                            Puncture_LR += 1
-                        elif x < x_min:
-                            x_end = x_min
-                            y_end = (x_min-x_old)/(x-x_old)*(y-y_old)+y_old
-                            points[-1] = (x_end,y_end)
-                            x_new = x_max
-                            y_new = y_end
-                            Puncture_LR += 1
-                        if y > y_max:
-                            y_end = y_max
-                            x_end = (y_max-y_old)/(y-y_old)*(x-x_old)+x_old
-                            points[-1] = (x_end,y_end)
-                            x_new = x_end
-                            y_new = y_min
-                            Puncture_UD += 1
-                        elif y < y_min:
-                            y_end = y_min
-                            x_end = (y_min-y_old)/(y-y_old)*(x-x_old)+x_old
-                            points[-1] = (x_end,y_end)
-                            x_new = x_end
-                            y_new = y_max
-                            Puncture_UD += 1
-                        x = x_new
-                        y = y_new
-
-                        print(AccLength)
-
-                        sketch = m.sketches['__profile__']
-                        sketch.Spline(points=points)         
-                        points = [] # clear out old path 
-                        points.append((x,y))           
-                        m.Part(dimensionality=TWO_D_PLANAR, name=NoP, type=DEFORMABLE_BODY)
-                        m.parts[NoP].BaseWire(sketch=sketch)
-                        del sketch
-                        # add up partlength
-                        partlength = m.parts[NoP].edges[0].getSize()
-                        AccLength += partlength
-                        # creating sets 
-                        pos1 = m.parts[NoP].vertices[0].pointOn
-                        pos2 = m.parts[NoP].vertices[1].pointOn
-                        pos3 = m.parts[NoP].edges[0].pointOn
-                        
-                        m.parts[NoP].Set(name='Start', vertices=
-                            m.parts[NoP].vertices.findAt(pos1))    
-                        m.parts[NoP].Set(name='End', vertices=
-                            m.parts[NoP].vertices.findAt(pos2))    
-                        m.parts[NoP].Set(edges=
-                        m.parts[NoP].edges.findAt(pos3), name='fibre')
-
-                        # Assign section & beam orientation
-                        m.parts[NoP].SectionAssignment(offset=0.0,
-                            offsetField='', offsetType=MIDDLE_SURFACE, region=
-                            m.parts[NoP].sets['fibre'], sectionName=
-                            'Circular_Beam', thicknessAssignment=FROM_SECTION)
-                        m.parts[NoP].assignBeamSectionOrientation(method=
-                            N1_COSINES, n1=(0.0, 0.0, -1.0), region=
-                            m.parts[NoP].sets['fibre'])
-
-                        ang_dev.append(min(max(random.normalvariate(ang_av,ang_stdev),ang_min),ang_max))
-                        fibrecount +=1
+                    ang_dev.append(min(max(random.normalvariate(ang_av,ang_stdev),ang_min),ang_max))
+                    fibrecount +=1
             FLS = []
             for p in range(len(m.parts)): 
                 FLS.append('F'+str(p))
@@ -394,13 +254,6 @@ for t_i in t_ns:
                     ang_hist[2]+=1
                 elif (157.5<b<=180):
                     ang_hist[3]+=1
-
-            # account for mirrored copies in sinuosidal fibres
-            if FibreType == 'Sinusoidal':
-                ang_hist_new = [0,0,0,0,0,0,0,0]
-                for i in range(len(ang_hist)):
-                    ang_hist_new[i] = (ang_hist[i]+ang_hist[len(ang_hist)-1-i])*2
-                ang_hist = ang_hist_new
 
             mdb.customData.saveLists = [ang_hist]
             mean_ang_hist = sum(ang_hist) / len(ang_hist) # Calculates the mean of the values
@@ -511,92 +364,30 @@ for t_i in t_ns:
             # creating the Periodic Boundary Conditions
             S_E = ['.Start','.End']
             S_E_s = ['S','E']
-            if FibreType == 'Sinusoidal':
-                C_O = 0
-                for k in range(0,len(FL),4):
+            C_set = 'F0.Start'
+            for k in range(0,len(FL)-1):
+                Pos = a.sets[FL[k]+'.End'].vertices[0].pointOn[0]
+                CoeffLR = Pos[0]/(b_2)
+                CoeffUD = Pos[1]/(b_2)
+                # Left-Right linking
+                if (abs(CoeffLR)==1):
+                    m.Equation(name='PBC'+str(k)+str(k+1)+'-LR-X', terms=(
+                        (CoeffLR, FL[k]+'.End', 1), (-CoeffLR, FL[k+1]+'.Start', 1),(
+                            -1.0, 'X-Dir', 1), (1.0, 'Origin', 1)))
+                    m.Equation(name='PBC'+str(k)+str(k+1)+'-LR-Y', terms=(
+                        (CoeffLR, FL[k]+'.End', 2), (-CoeffLR, FL[k+1]+'.Start', 2),
+                        (-1.0, 'X-Dir', 2), (1.0, 'Origin', 2)))
                     
-                    for l in range(len(S_E)):
-                        Pos = a.sets[FL[k]+S_E[l]].vertices[0].pointOn[0]
-                        CoeffLR = Pos[0]/(b_2)
-                        CoeffUD = Pos[1]/(b_2)
-                        # Left-Right linking
-                        if (abs(CoeffLR)==1):
-                            m.Equation(name='PBC'+str(k)+S_E_s[l]+'-LR-X', terms=(
-                                (CoeffLR, FL[k]+S_E[l], 1), (-CoeffLR, FL[k+2]+S_E[l], 1),
-                                (-1.0, 'X-Dir', 1), (1.0, 'Origin', 1)))
-                            m.Equation(name='PBC'+str(k)+S_E_s[l]+'-LR-Y', terms=(
-                                (CoeffLR, FL[k]+S_E[l], 2), (-CoeffLR, FL[k+2]+S_E[l], 2),
-                                (-1.0, 'X-Dir', 2), (1.0, 'Origin', 2)))
-                            m.Equation(name='PBC'+str(k)+S_E_s[l]+'-Rot', terms=(
-                                (CoeffLR, FL[k]+S_E[l], 6), (-CoeffLR, FL[k+2]+S_E[l], 6),))
-                            
-                            m.Equation(name='PBC'+str(k+1)+S_E_s[l]+'-LR-X', terms=(
-                                (CoeffLR, FL[k+1]+S_E[l], 1), (-CoeffLR, FL[k+3]+S_E[l], 1),
-                                (-1.0, 'X-Dir', 1), (1.0, 'Origin', 1)))
-                            m.Equation(name='PBC'+str(k+1)+S_E_s[l]+'-LR-Y', terms=(
-                                (CoeffLR, FL[k+1]+S_E[l], 2), (-CoeffLR, FL[k+3]+S_E[l], 2),
-                                (-1.0, 'X-Dir', 2), (1.0, 'Origin', 2)))
-                            m.Equation(name='PBC'+str(k+1)+S_E_s[l]+'-Rot', terms=(
-                                (CoeffLR, FL[k+1]+S_E[l], 6), (-CoeffLR, FL[k+3]+S_E[l], 6),))
-                            
-                            # find the LR-set closest to origin
-                            if abs(CoeffUD) > C_O:
-                                C_O = abs(CoeffUD)
-                                if (CoeffLR == 1 and CoeffUD >0):
-                                    C_set = FL[k+3]+S_E[l]
-                                elif (CoeffLR == 1 and CoeffUD <0):
-                                    C_set = FL[k+2]+S_E[l]
-                                elif (CoeffLR == -1 and CoeffUD >0):
-                                    C_set = FL[k+1]+S_E[l]
-                                elif (CoeffLR == -1 and CoeffUD <0):
-                                    C_set = FL[k]+S_E[l]
-
-                        # Up-Down linking
-                        elif (abs(CoeffUD)==1):
-                            m.Equation(name='PBC'+str(k)+S_E_s[l]+'-UD-X', terms=(
-                                (CoeffUD, FL[k]+S_E[l], 1), (-CoeffUD, FL[k+1]+S_E[l], 1),
-                                (-1.0, 'Y-Dir', 1), (1.0, 'Origin', 1)))
-                            m.Equation(name='PBC'+str(k)+S_E_s[l]+'-UD-Y', terms=(
-                                (CoeffUD, FL[k]+S_E[l], 2), (-CoeffUD, FL[k+1]+S_E[l], 2),
-                                (-1.0, 'Y-Dir', 2), (1.0, 'Origin', 2)))
-                            m.Equation(name='PBC'+str(k)+S_E_s[l]+'-Rot', terms=(
-                                (CoeffUD, FL[k]+S_E[l], 6), (-CoeffUD, FL[k+1]+S_E[l], 6),))
-                            
-                            m.Equation(name='PBC'+str(k+1)+S_E_s[l]+'-UD-X', terms=(
-                                (CoeffUD, FL[k+2]+S_E[l], 1), (-CoeffUD, FL[k+3]+S_E[l], 1),
-                                (-1.0, 'Y-Dir', 1), (1.0, 'Origin', 1)))
-                            m.Equation(name='PBC'+str(k+1)+S_E_s[l]+'-UD-Y', terms=(
-                                (CoeffUD, FL[k+2]+S_E[l], 2), (-CoeffUD, FL[k+3]+S_E[l], 2),
-                                (-1.0, 'Y-Dir', 2), (1.0, 'Origin', 2)))
-                            m.Equation(name='PBC'+str(k+1)+S_E_s[l]+'-Rot', terms=(
-                                (CoeffUD, FL[k+2]+S_E[l], 6), (-CoeffUD, FL[k+3]+S_E[l], 6),))
-                            
-
-            elif FibreType == 'RandomWalk':
-                C_set = 'F0.Start'
-                for k in range(0,len(FL)-1):
-                    Pos = a.sets[FL[k]+'.End'].vertices[0].pointOn[0]
-                    CoeffLR = Pos[0]/(b_2)
-                    CoeffUD = Pos[1]/(b_2)
-                    # Left-Right linking
-                    if (abs(CoeffLR)==1):
-                        m.Equation(name='PBC'+str(k)+str(k+1)+'-LR-X', terms=(
-                            (CoeffLR, FL[k]+'.End', 1), (-CoeffLR, FL[k+1]+'.Start', 1),(
-                                -1.0, 'X-Dir', 1), (1.0, 'Origin', 1)))
-                        m.Equation(name='PBC'+str(k)+str(k+1)+'-LR-Y', terms=(
-                            (CoeffLR, FL[k]+'.End', 2), (-CoeffLR, FL[k+1]+'.Start', 2),
-                            (-1.0, 'X-Dir', 2), (1.0, 'Origin', 2)))
-                        
-                    elif (abs(CoeffUD)==1):
-                        m.Equation(name='PBC'+str(k)+str(k+1)+'-UD-X', terms=(
-                            (CoeffUD, FL[k]+'.End', 1), (-CoeffUD, FL[k+1]+'.Start', 1),
-                            (-1.0, 'Y-Dir', 1), (1.0, 'Origin', 1)))
-                        m.Equation(name='PBC'+str(k)+str(k+1)+'-UD-Y', terms=(
-                            (CoeffUD, FL[k]+'.End', 2), (-CoeffUD, FL[k+1]+'.Start', 2),
-                            (-1.0, 'Y-Dir', 2), (1.0, 'Origin', 2)))
-                        
-                    m.Equation(name='PBC'+str(k)+str(k+1)+'-Rot', terms=(
-                        (CoeffLR, FL[k]+'.End', 6), (-CoeffLR, FL[k+1]+'.Start', 6),))
+                elif (abs(CoeffUD)==1):
+                    m.Equation(name='PBC'+str(k)+str(k+1)+'-UD-X', terms=(
+                        (CoeffUD, FL[k]+'.End', 1), (-CoeffUD, FL[k+1]+'.Start', 1),
+                        (-1.0, 'Y-Dir', 1), (1.0, 'Origin', 1)))
+                    m.Equation(name='PBC'+str(k)+str(k+1)+'-UD-Y', terms=(
+                        (CoeffUD, FL[k]+'.End', 2), (-CoeffUD, FL[k+1]+'.Start', 2),
+                        (-1.0, 'Y-Dir', 2), (1.0, 'Origin', 2)))
+                    
+                m.Equation(name='PBC'+str(k)+str(k+1)+'-Rot', terms=(
+                    (CoeffLR, FL[k]+'.End', 6), (-CoeffLR, FL[k+1]+'.Start', 6),))
 
 
 
@@ -622,10 +413,7 @@ for t_i in t_ns:
                 region=a.sets[C_set], u1=SET, u2=SET, ur3=UNSET)
 
             # create Loadcases
-            if FibreType == 'Sinusoidal':
-                JobName_raw = date+'_S_'+str(b_n)+'_'+str(t_n)
-            elif FibreType == 'RandomWalk':
-                JobName_raw = date+'_R_'+str(b_n)+'x'+str(t_n)+'xlsm'+str(l_s_mean)+'_plast'+'_viso'+str(round(v_iso, 2))
+            JobName_raw = date+'_R_'+str(b_n)+'x'+str(t_n)+'xlsm'+str(l_s_mean)+'_plast'+'_viso'+str(round(v_iso, 2))
             JobName_global = JobName_raw.replace('.','_')
 
             # Uniaxial
