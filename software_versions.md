@@ -6,7 +6,7 @@ Paper: Zimmerli et al. (2026)
 Validated with:
 
 - Abaqus/Standard 2022
-- MATLAB R2022a
+- MATLAB R2021a
 - Windows 11 Pro 24H1
 
 Python packages:
