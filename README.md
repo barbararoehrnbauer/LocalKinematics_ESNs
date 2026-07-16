@@ -3,7 +3,7 @@
 ## Overview
 The article "A continuum mechanics based framework to quantify local kinematics in electrospun networks for mechanobiological investigations"  introduces a numerical and continuum-mechanics-based workflow to quantify local surface kinematics in electrospun fiber networks (ESN). The repository provides the simulation and post-processing scripts used to generate the numerical ESN models, extract nodal coordinate data, render virtual ESN image sequences, and compute the local kinematic quantities reported in the manuscript.
 
-This repository can be cited useing DOI XXXXXXX.
+This repository can be cited using DOI XXXXXXX.
 
 ### Authors
 
