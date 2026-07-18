@@ -34,7 +34,7 @@ To allow the analysis and rendering scripts to be run without first executing th
 
 Using these two files, `D_Kinematic_Fingerprint_Analysis.mlx` and `E_RenderESN.mlx` (Sections 4 and 5) can be run directly, without needing Abaqus or having to run `A_ESN_builder.py` / `B_Script_Coord_20Frames.py` / `C_Import_COORD.m` beforehand. Simply point `coordinateFile` / `load(...)` and `fiberStackOrderFile` / `fibre_stack_filename` in these two scripts to the corresponding filenames above.
 
-Also included is **`Matlab_009_createPlots_FEM_Matlab_Q4_reference.m`**, a plotting helper function required by `D_Kinematic_Fingerprint_Analysis.mlx` to generate the averaged kinematic field plots (see Section 4). It must be located on the MATLAB path (e.g. in the same folder as `D_Kinematic_Fingerprint_Analysis.mlx`) whenever `plotKinematicFields = true`.
+Also included is **`Function_createPlots.m`**, a plotting helper function required by `D_Kinematic_Fingerprint_Analysis.mlx` to generate the averaged kinematic field plots (see Section 4). It must be located on the MATLAB path (e.g. in the same folder as `D_Kinematic_Fingerprint_Analysis.mlx`) whenever `plotKinematicFields = true`.
 
 ---
 
@@ -207,7 +207,7 @@ This is the main MATLAB analysis script of the framework. It processes the nodal
 - MATLAB (tested as a MATLAB Live Script, `.mlx`)
 - No toolboxes beyond base MATLAB are required
 - Input: a `<...>_COORD.mat` file (table `COORD`, containing at least the columns `Part_Instance`, `Node_ID`, `Frame_0_X`, `Frame_0_Y`, `Frame_20_X`, `Frame_20_Y`, produced by `C_Import_COORD.m`) and the matching `<...>_fiberstackorder.txt` file
-- **`Matlab_009_createPlots_FEM_Matlab_Q4_reference.m`** (included in this repository) – plotting helper function, required on the MATLAB path whenever `plotKinematicFields = true`; it generates the averaged kinematic field plots described in step 9 below
+- **`Function_createPlots.m`** (included in this repository) – plotting helper function, required on the MATLAB path whenever `plotKinematicFields = true`; it generates the averaged kinematic field plots described in step 9 below
 
 ### Configuration (User settings section)
 
@@ -252,7 +252,7 @@ fiberStackOrderFile = '2024-05-26_R_200x6xlsm5_plast_viso0_9_UniAx_0_fiberstacko
    These four **non-averaged** corner states per element form the basis of the kinematic fingerprint.
 7. **Averaged fields for visualization** – **F** is averaged across all element corners contributing to a given facet center; E, R, and m for the plotted fields are then computed from this averaged **F** (not averaged individually), consistent with the manuscript's methodology.
 8. **Kinematic fingerprint assembly** – the non-averaged local E₁₁, E₂₂, E₁₂, R, and m values are flattened into fingerprint vectors, invalid (NaN) states are removed, and a fingerprint table plus summary statistics (mean, standard deviation) are compiled.
-9. **Plotting** (optional, controlled by the `plot...` flags) – facet subdivision and displacement field, averaged kinematic fields (via `Matlab_009_createPlots_FEM_Matlab_Q4_reference.m`), and histograms of the fingerprint distributions (E₁₁, E₂₂, E₁₂, R, m).
+9. **Plotting** (optional, controlled by the `plot...` flags) – facet subdivision and displacement field, averaged kinematic fields (via `Function_createPlots.m`), and histograms of the fingerprint distributions (E₁₁, E₂₂, E₁₂, R, m).
 10. **Results storage** – all results per network-width/facet-width combination are stored in the `resultsBySetting` cell array (containing raw, averaged, and fingerprint data), and convenience variables (`E11_vec`, `E22_vec`, `E12_vec`, `R_vec`, `R_rad_vec`, `m_vec`, `fingerprint_table`, `stats`) are exposed for the last analyzed setting.
 
 ### Local functions (defined at the end of the script)
@@ -264,7 +264,7 @@ fiberStackOrderFile = '2024-05-26_R_200x6xlsm5_plast_viso0_9_UniAx_0_fiberstacko
 ### Output
 
 - MATLAB workspace variables and the `resultsBySetting` cell array, containing per-setting facet centers, displacement fields, non-averaged local kinematic quantities, averaged fields for visualization, and the fingerprint table/statistics.
-- Figures (if enabled): facet subdivision plot, averaged kinematic field plots (via `Matlab_009_createPlots_FEM_Matlab_Q4_reference.m`), and kinematic fingerprint histograms.
+- Figures (if enabled): facet subdivision plot, averaged kinematic field plots (via `Function_createPlots.m`), and kinematic fingerprint histograms.
 
 ---
 
